@@ -54,3 +54,18 @@ def gen_batch_sequence(sql_data, table_data,idxes,start, end):
         raw_data.append((sql['question'],table_data[table_id]['header'], sql['query']))
         
     return (question_seq, column_seq, number_of_col, answer_seq, query_seq, ground_truth_cond_seq,raw_data)
+
+#  in the code for the reference paper they sorted the inputs (acc. to the size)
+# TODO: Check if inp_length is still required or not.
+
+
+def run_lstm(lstm, inp, inp_length, prev_hidden=None):
+    '''
+    This function takes in 3 arguments 
+    lstm : the name of the lstm variable that needs to be run
+    inp  : the input in the for [Batch size , num_tok, last_layer]
+    inp_length: an array that contains the length of each element in the batch size = batch size
+    pre_hidden: hidden layer values of the previous lstm layer
+    '''
+    ret_h, ret_c = lstm(inp, prev_hidden)
+    return ret_h, ret_c
