@@ -2,3 +2,5 @@ git_cred.cred
 data/*
 Graphs/*.png
 glove/*
+.~lock.*
+.ipynb_checkpoints
