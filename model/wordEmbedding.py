@@ -6,9 +6,9 @@ import numpy as np
 from utils.utils import gen_batch_sequence
 
 
-class WordEmbedding(nn.Module):
+class WordEmbedding:
     def __init__(self, bert_encoder, max_length=None, separator='[SEP]'):
-        super(WordEmbedding, self).__init__()
+        # super(WordEmbedding, self).__init__()
         self.bert_tokenizer = BertTokenizer.from_pretrained(bert_encoder)
         self.bert_model = BertModel.from_pretrained(bert_encoder)
         self.max_length = max_length
@@ -22,7 +22,7 @@ class WordEmbedding(nn.Module):
                           'return_tensors': 'pt'}
 
         if (self.max_length != None):
-            self.bert_args['max_length'] = self.max_length
+            self.bert_args['max_length'] = + self.max_length
             self.bert_args['padding'] = 'max_length'
 
         for param in self.bert_model.parameters():
