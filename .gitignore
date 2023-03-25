@@ -1,3 +1,4 @@
 git_cred.cred
 data/*
 Graphs/*.png
+glove/*
