@@ -3,7 +3,7 @@ import torch.nn as nn
 from transformers import BertTokenizer, BertModel
 import numpy as np
 
-from utils.utils import gen_batch_sequence
+from util.utils import gen_batch_sequence
 
 
 class WordEmbedding:
@@ -91,7 +91,7 @@ class WordEmbedding:
         for i in range(len(embedding)):
             zeros_append = np.tile(zeros,(max_len-embedding_len[i],1))
             embedding[i] = np.concatenate((embedding[i],zeros_append),axis=0)
-        embedding=torch.tensor(embedding)
+        embedding=torch.tensor(embedding).to('cuda')
         
         return embedding, embedding_len, col_len
 
