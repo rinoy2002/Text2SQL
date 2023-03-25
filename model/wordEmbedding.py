@@ -65,6 +65,35 @@ class WordEmbedding:
         # odict_keys(['last_hidden_state', 'pooler_output'])
         return bert_op, input_string_lengths
 
+    def gen_col_batch(self, col_batch):
+        '''
+        Input: col_batch: list of columns in a batch [[[str]]]
+        Output: embedding : embedding of word [No. of column in a batch X (max column length in the batch + 2) X 768]
+                embedding_len : word length 
+                col_len : No. of column in a table
+        
+        '''
+        col_len = []
+        embedding = []
+        embedding_len=[]
+        # zero array for appending
+        zeros = np.zeros(768,dtype = np.float32)
+        for i in range(len(col_batch)):
+            col_len.append(len(col_batch[i]))
+            for y in col_batch[i]:
+                inp_encode  = self.bert_tokenizer.encode_plus(text=y,**self.bert_args)
+                bert_encode = self.bert_model(**inp_encode)
+                bert_encoding_numpy = torch.squeeze(bert_encode.last_hidden_state,dim = 0).detach().numpy()
+                embedding_len.append(bert_encoding_numpy.shape[0])
+                embedding.append(bert_encoding_numpy)
+                
+        max_len = max(embedding_len)
+        for i in range(len(embedding)):
+            zeros_append = np.tile(zeros,(max_len-embedding_len[i],1))
+            embedding[i] = np.concatenate((embedding[i],zeros_append),axis=0)
+        embedding=torch.tensor(embedding)
+        
+        return embedding, embedding_len, col_len
 
 def test_wordembed_module(train_sql, train_table, batch_size=32):
     word_emb = WordEmbedding('bert-base-uncased')
