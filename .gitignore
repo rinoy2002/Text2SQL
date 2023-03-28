@@ -4,3 +4,4 @@ Graphs/*.png
 glove/*
 .~lock.*
 .ipynb_checkpoints
+**/__pycache__

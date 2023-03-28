@@ -107,14 +107,14 @@ def generate_batch_query(sql_data, idx, start, end):
     # TODO: this fucntion is redundant please find a proper alternative by gen_batch_sequence.
     '''
     Input: 
-        sql_data (List)   -  a list of sql query dictionary [this is the original data and not shuffled]
-        idx  (List)       - the order in which the dataset is shuffled
-        start (int)       - start index
-        end (int)         - end index
+        sql_data -  a list of sql query dictionary [this is the original data and not shuffled]
+        idx - the order in which the dataset is shuffled
+        start - start index
+        end - end index
 
-    Output:
-        query_gt (list)   - containing the ground truth sql query of the batch
-        table_id (list)   - list containing the tables sql queries.
+    Output: 
+        query_gt: lsit containing the ground truth sql query of the batch
+        table_id: list containing the tables sql queries.
     '''
     query_gt = []
     table_id = []
