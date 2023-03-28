@@ -3,6 +3,7 @@ from types import GeneratorType
 from datetime import datetime
 
 import numpy as np
+import torch
 import matplotlib.pyplot as plt
 
 
@@ -22,10 +23,11 @@ def load_data_set(dataset_name):
     table_count = 0
     sql_data = []
     table_data = {}
-    
+
     with open(sql_file) as lines:
         for line in lines:
-            sql = json.loads(line.strip()) #remove white space before and after 
+            # remove white space before and after
+            sql = json.loads(line.strip())
             sql_data.append(sql)
             sql_query_count += 1
     with open(tables_file) as lines:
@@ -34,11 +36,10 @@ def load_data_set(dataset_name):
             table_data[tab['id']] = tab
             table_count += 1
     print(f"Loaded {sql_query_count} queries and {table_count} tables")
-    return sql_data,table_data
+    return sql_data, table_data
 
 
-
-def gen_batch_sequence(sql_data, table_data,idxes,start, end):
+def gen_batch_sequence(sql_data, table_data, idxes, start, end):
     question_seq = []
     column_seq = []
     number_of_col = []
@@ -56,13 +57,14 @@ def gen_batch_sequence(sql_data, table_data,idxes,start, end):
                            sql['sql']['sel'],
                            len(sql['sql']['conds']),
                            tuple(x[0] for x in sql['sql']['conds']),
-                            tuple(x[1] for x in sql['sql']['conds'])
-                          ))
+                           tuple(x[1] for x in sql['sql']['conds'])
+                           ))
         query_seq.append(sql['tokenized_query'])
         ground_truth_cond_seq.append(sql['sql']['conds'])
-        raw_data.append((sql['question'],table_data[table_id]['header'], sql['query']))
-        
-    return (question_seq, column_seq, number_of_col, answer_seq, query_seq, ground_truth_cond_seq,raw_data)
+        raw_data.append(
+            (sql['question'], table_data[table_id]['header'], sql['query']))
+
+    return (question_seq, column_seq, number_of_col, answer_seq, query_seq, ground_truth_cond_seq, raw_data)
 
 
 #  in the code for the reference paper they sorted the inputs (acc. to the size)
@@ -76,17 +78,33 @@ def run_lstm(lstm, inp, inp_length, prev_hidden=None):
         pre_hidden (tensor) - hidden layer values of the previous lstm layer
     Output: 
         Same as nn.LSTM
-    
+
     This function is used to run the LSTM Layer
     '''
     if prev_hidden != None:
-        ret_h, ret_c = lstm(inp,prev_hidden)
-    else: 
+        ret_h, ret_c = lstm(inp, prev_hidden)
+    else:
         ret_h, ret_c = lstm(inp)
     return ret_h, ret_c
 
+
+def col_name_encode(name_inp_var, name_len, col_len, enc_lstm):
+    # Encode the columns.
+    # The embedding of a column name is the last state of its LSTM output.
+    name_hidden, _ = run_lstm(enc_lstm, name_inp_var, name_len)
+    name_out = name_hidden[tuple(range(len(name_len))), name_len - 1]
+    ret = torch.FloatTensor(len(col_len), max(col_len),
+                            name_out.size()[1]).zero_()
+    st = 0
+    for idx, cur_len in enumerate(col_len):
+        ret[idx, :cur_len] = name_out.data[st:st + cur_len]
+        st += cur_len
+    ret_var = torch.tensor(ret).to('cuda')
+    return ret_var, col_len
+
+
 def generate_batch_query(sql_data, idx, start, end):
-# TODO: this fucntion is redundant please find a proper alternative by gen_batch_sequence.
+    # TODO: this fucntion is redundant please find a proper alternative by gen_batch_sequence.
     '''
     Input: 
         sql_data (List)   -  a list of sql query dictionary [this is the original data and not shuffled]
@@ -117,7 +135,7 @@ def plot_curve(x_item, y_item, item_name, dataLength, format='png'):
         item_name: the name to be plotted on the x axis
         dataLength: the size of the dataset trained on
         format: the format in which the image is to be saved.
-    
+
     Output: 
         None.
 
@@ -143,6 +161,7 @@ def plot_curve(x_item, y_item, item_name, dataLength, format='png'):
     plt.show()
     return
 
+
 def create_toy_dataset(actual_queries, table_data, num_samples):
     '''
     Input: 
@@ -153,15 +172,17 @@ def create_toy_dataset(actual_queries, table_data, num_samples):
     Doc:
         Based on the num_samples we create the required mini dataset.
     '''
-    
+
     idx_list = np.random.permutation(len(actual_queries))[:num_samples]
     toy_queries = list(actual_queries[x] for x in idx_list)
     toy_tables = {}
     for x in range(num_samples):
-        toy_tables[toy_queries[x]['table_id']] = table_data[toy_queries[x]['table_id']]
+        toy_tables[toy_queries[x]['table_id']
+                   ] = table_data[toy_queries[x]['table_id']]
     return toy_queries, toy_tables
 
-def epoch_train(model, optimizer,batch_size, sql_queries, table_data):
+
+def epoch_train(model, optimizer, batch_size, sql_queries, table_data):
     '''
     Input: 
         model: a pytorch model subclass of nn.Module
@@ -176,26 +197,28 @@ def epoch_train(model, optimizer,batch_size, sql_queries, table_data):
     cumulative_loss = 0.0
     start = 0
 
-    while start< num_queries:
-        end = start + batch_size if start + batch_size < len(perm) else len(perm)
+    while start < num_queries:
+        end = start + batch_size if start + \
+            batch_size < len(perm) else len(perm)
 
         q_seq, col_seq, col_num, ans_seq, query_seq, ground_truth_cond_seq, raw_data = \
             gen_batch_sequence(sql_queries, table_data, perm, start, end)
-        
+
         score = model.forward(q_seq, col_seq)
-        loss = model.loss(score,ans_seq)
+        loss = model.loss(score, ans_seq)
         cumulative_loss += loss.data.cpu().numpy() * (end - start)
         optimizer.zero_grad()
         loss.backward()
-        
+
         optimizer.step()
-        
+
         start = end
     return cumulative_loss / len(sql_queries)
 
-def epoch_acc(model, batch_size, sql_data, table_data, save_results = False):
+
+def epoch_acc(model, batch_size, sql_data, table_data, save_results=False):
     '''
-    
+
     '''
     model.eval()
     perm = list(range(len(sql_data)))
@@ -203,25 +226,26 @@ def epoch_acc(model, batch_size, sql_data, table_data, save_results = False):
     one_acc_num = 0.0
     tot_acc_num = 0.0
     while start < len(sql_data):
-        end = start + batch_size if start + batch_size < len(perm) else len(perm)
+        end = start + batch_size if start + \
+            batch_size < len(perm) else len(perm)
 
         q_seq, col_seq, col_num, ans_seq, query_seq, ground_truth_cond_seq, raw_data =\
             gen_batch_sequence(sql_data, table_data, perm, start, end)
-        
+
         raw_q_seq = [x[0] for x in raw_data]
         raw_col_seq = [x[1] for x in raw_data]
-        
+
         query_gt, table_ids = generate_batch_query(sql_data, perm, start, end)
         ground_truth_sel_seq = [x[1] for x in ans_seq]
-        
+
         score = model.forward(q_seq, col_seq, )
         pred_queries = model.gen_query(score, q_seq, col_seq,
                                        raw_q_seq, raw_col_seq)
         one_err, tot_err = model.check_accuracy(pred_queries, query_gt)
-        
+
         one_acc_num += (end - start - one_err)
         tot_acc_num += (end - start - tot_err)
-        
+
         start = end
-        
-    return tot_acc_num/ len(sql_data), one_acc_num/len(sql_data)
+
+    return tot_acc_num / len(sql_data), one_acc_num/len(sql_data)
