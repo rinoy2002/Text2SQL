@@ -3,7 +3,7 @@ import torch.nn as nn
 from transformers import BertTokenizer, BertModel
 import numpy as np
 
-from utils.utils import gen_batch_sequence
+from util.utils import gen_batch_sequence
 
 
 class WordEmbedding:

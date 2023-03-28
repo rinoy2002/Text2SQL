@@ -79,22 +79,24 @@ def run_lstm(lstm, inp, inp_length, prev_hidden=None):
     
     This function is used to run the LSTM Layer
     '''
-    ret_h, ret_c = lstm(inp, prev_hidden)
+    if prev_hidden != None:
+        ret_h, ret_c = lstm(inp,prev_hidden)
+    else: 
+        ret_h, ret_c = lstm(inp)
     return ret_h, ret_c
 
-
 def generate_batch_query(sql_data, idx, start, end):
-# TODO: this fucntion is redundant please find a proper alternative by gen_batch sequence.
+# TODO: this fucntion is redundant please find a proper alternative by gen_batch_sequence.
     '''
     Input: 
-        sql_data -  a list of sql query dictionary [this is the original data and not shuffled]
-        idx - the order in which the dataset is shuffled
-        start - start index
-        end - end index
-    
-    Output: 
-        query_gt: lsit containing the ground truth sql query of the batch
-        table_id: list containing the tables sql queries.
+        sql_data (List)   -  a list of sql query dictionary [this is the original data and not shuffled]
+        idx  (List)       - the order in which the dataset is shuffled
+        start (int)       - start index
+        end (int)         - end index
+
+    Output:
+        query_gt (list)   - containing the ground truth sql query of the batch
+        table_id (list)   - list containing the tables sql queries.
     '''
     query_gt = []
     table_id = []
@@ -158,3 +160,68 @@ def create_toy_dataset(actual_queries, table_data, num_samples):
     for x in range(num_samples):
         toy_tables[toy_queries[x]['table_id']] = table_data[toy_queries[x]['table_id']]
     return toy_queries, toy_tables
+
+def epoch_train(model, optimizer,batch_size, sql_queries, table_data):
+    '''
+    Input: 
+        model: a pytorch model subclass of nn.Module
+        optimizer: a pytorch optimizer 
+        batch_size: batch size of the 
+    Output:
+        loss: total cumulative loss of all 3 modules
+    '''
+    model.train()
+    num_queries = len(sql_queries)
+    perm = np.random.permutation(num_queries)
+    cumulative_loss = 0.0
+    start = 0
+
+    while start< num_queries:
+        end = start + batch_size if start + batch_size < len(perm) else len(perm)
+
+        q_seq, col_seq, col_num, ans_seq, query_seq, ground_truth_cond_seq, raw_data = \
+            gen_batch_sequence(sql_queries, table_data, perm, start, end)
+        
+        score = model.forward(q_seq, col_seq)
+        loss = model.loss(score,ans_seq)
+        cumulative_loss += loss.data.cpu().numpy() * (end - start)
+        optimizer.zero_grad()
+        loss.backward()
+        
+        optimizer.step()
+        
+        start = end
+    return cumulative_loss / len(sql_queries)
+
+def epoch_acc(model, batch_size, sql_data, table_data, save_results = False):
+    '''
+    
+    '''
+    model.eval()
+    perm = list(range(len(sql_data)))
+    start = 0
+    one_acc_num = 0.0
+    tot_acc_num = 0.0
+    while start < len(sql_data):
+        end = start + batch_size if start + batch_size < len(perm) else len(perm)
+
+        q_seq, col_seq, col_num, ans_seq, query_seq, ground_truth_cond_seq, raw_data =\
+            gen_batch_sequence(sql_data, table_data, perm, start, end)
+        
+        raw_q_seq = [x[0] for x in raw_data]
+        raw_col_seq = [x[1] for x in raw_data]
+        
+        query_gt, table_ids = generate_batch_query(sql_data, perm, start, end)
+        ground_truth_sel_seq = [x[1] for x in ans_seq]
+        
+        score = model.forward(q_seq, col_seq, )
+        pred_queries = model.gen_query(score, q_seq, col_seq,
+                                       raw_q_seq, raw_col_seq)
+        one_err, tot_err = model.check_accuracy(pred_queries, query_gt)
+        
+        one_acc_num += (end - start - one_err)
+        tot_acc_num += (end - start - tot_err)
+        
+        start = end
+        
+    return tot_acc_num/ len(sql_data), one_acc_num/len(sql_data)
