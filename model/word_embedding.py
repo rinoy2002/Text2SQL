@@ -3,7 +3,7 @@ import torch.nn as nn
 from transformers import BertTokenizer, BertModel
 import numpy as np
 
-from utils.utils import gen_batch_sequence
+from util.utils import gen_batch_sequence
 
 
 class WordEmbedding:
@@ -28,7 +28,7 @@ class WordEmbedding:
         for param in self.bert_model.parameters():
             param.requires_grad = False
         assert list(self.bert_model.parameters())[0].requires_grad == False
-
+        
         if self.gpu:
             self.bert_model = self.bert_model.to('cuda')
 
@@ -65,6 +65,44 @@ class WordEmbedding:
         # odict_keys(['last_hidden_state', 'pooler_output'])
         return bert_op, input_string_lengths
 
+    def gen_col_batch(self, col_batch):
+        '''
+        Input: col_batch: list of columns in a batch [[[str]]]
+        Output: embedding : embedding of word [No. of column in a batch X (max column length in the batch + 2) X 768]
+                embedding_len : word length 
+                col_len : No. of column in a table
+        
+        '''
+        col_len = []
+        embedding = []
+        embedding_len=[]
+        # zero array for appending
+        zeros = np.zeros(768,dtype = np.float32)
+        for i in range(len(col_batch)):
+            col_len.append(len(col_batch[i]))
+            for y in col_batch[i]:
+                inp_encode  = self.bert_tokenizer.encode_plus(text=y,**self.bert_args)
+                if self.gpu:
+                    for key in inp_encode.keys():
+                        inp_encode[key] = inp_encode[key].to('cuda')
+                bert_encode = self.bert_model(**inp_encode)
+                if bert_encode.last_hidden_state.is_cuda:
+                    bert_encoding_numpy = torch.squeeze(bert_encode.last_hidden_state,dim = 0).cpu().detach().numpy()
+                bert_encoding_numpy = torch.squeeze(bert_encode.last_hidden_state,dim = 0).cpu().numpy()
+                embedding_len.append(bert_encoding_numpy.shape[0])
+                embedding.append(bert_encoding_numpy)
+                
+        max_len = max(embedding_len)
+        for i in range(len(embedding)):
+            zeros_append = np.tile(zeros,(max_len-embedding_len[i],1))
+            embedding[i] = np.concatenate((embedding[i],zeros_append),axis=0)
+        
+        embedding = torch.tensor(embedding)
+        embedding_len = np.array(embedding_len)
+        if self.gpu:
+            embedding = embedding.to('cuda')
+        
+        return embedding, embedding_len, col_len
 
 def test_wordembed_module(train_sql, train_table, batch_size=32):
     word_emb = WordEmbedding('bert-base-uncased')
